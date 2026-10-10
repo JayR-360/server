@@ -24,10 +24,16 @@ async def upload(request: Request):
     audio = await request.body()
     if not audio:
         raise HTTPException(status_code=400, detail="empty body")
-    # return {"bytes": len(audio)}
     filename = f"rec_{int(time.time())}.wav"
     path = os.path.join(SAVE_DIR,filename)
     with open(path,"wb") as f:
         f.write(audio)
-    return {"saved":filename,"bytes":len(audio)}
+    try:
+        with open(path, "rb") as src:
+            result = client.audio.transcriptions.create(model="whisper-large-v3-turbo", file=(filename,src))
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=502, detail="transcription failed")
+
+    return {"saved": filename, "bytes": len(audio), "text": result.text}
 
