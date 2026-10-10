@@ -37,3 +37,12 @@ async def upload(request: Request):
 
     return {"saved": filename, "bytes": len(audio), "text": result.text}
 
+@app.get("/recordings")
+def files_fromserver(request:Request):
+    sent_key = request.query_params.get("key")
+    expected_key = os.environ.get("DEVICE_KEY")
+    if not expected_key or sent_key != expected_key:
+        raise HTTPException (status_code=401)
+    folders = sorted(os.listdir(SAVE_DIR))
+    return {"files":folders}
+    
