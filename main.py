@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.responses import PlainTextResponse
 from openai import OpenAI
 import os
 import time 
+
 
 app = FastAPI()
 client = OpenAI(api_key=os.environ.get("GROQ_API_KEY"),
@@ -36,7 +38,8 @@ async def upload(request: Request):
         print(e)
         raise HTTPException(status_code=502, detail="transcription failed")
 
-    return {"saved": filename, "bytes": len(audio), "text": result.text}
+    # return {"saved": filename, "bytes": len(audio), "text": result.text}
+    return PlainTextResponse(result.text.strip())
 
 @app.get("/recordings")
 def files_fromserver(request:Request):
