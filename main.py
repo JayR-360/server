@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import FileResponse
 from openai import OpenAI
 import os
 import time 
@@ -45,4 +46,14 @@ def files_fromserver(request:Request):
         raise HTTPException (status_code=401)
     folders = sorted(os.listdir(SAVE_DIR))
     return {"files":folders}
-    
+
+@app.get("/recordings/{name}")
+def downloads(name: str, request: Request):
+    sent_key = request.query_params.get("key")
+    expected_key = os.environ.get("DEVICE_KEY")
+    if not expected_key or sent_key != expected_key:
+        raise HTTPException (status_code=401)
+    path = os.path.join(SAVE_DIR, os.path.basename(name))
+    if not (os.path.isfile(path)):
+        raise HTTPException(status_code=404)
+    return FileResponse(path,media_type="audio/wav")
