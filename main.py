@@ -4,6 +4,16 @@ from fastapi.responses import PlainTextResponse
 from openai import OpenAI
 import os
 import time 
+import re
+import threading
+from fastapi import Response
+from starlette.concurrency import run_in_threadpool
+
+_latest = {"text": None}
+_lock = threading.Lock()
+
+def normalize(t: str) -> str:
+    return re.sub(r"[^a-z0-9' ]", "", t.lower()).strip()
 
 
 app = FastAPI()
@@ -32,14 +42,20 @@ async def upload(request: Request):
     with open(path,"wb") as f:
         f.write(audio)
     try:
-        with open(path, "rb") as src:
-            result = client.audio.transcriptions.create(model="whisper-large-v3-turbo", file=(filename,src))
+        def transcribe():
+            with open(path, "rb") as src:
+                return client.audio.transcriptions.create(
+                    model="whisper-large-v3-turbo", file=(filename, src))
+        result = await run_in_threadpool(transcribe)   # don't block the event loop
     except Exception as e:
         print(e)
         raise HTTPException(status_code=502, detail="transcription failed")
 
-    # return {"saved": filename, "bytes": len(audio), "text": result.text}
-    return PlainTextResponse(result.text.strip())
+    text = normalize(result.text)
+    if text:
+        with _lock:
+            _latest["text"] = text
+    return PlainTextResponse(text)
 
 @app.get("/recordings")
 def files_fromserver(request:Request):
@@ -60,3 +76,16 @@ def downloads(name: str, request: Request):
     if not (os.path.isfile(path)):
         raise HTTPException(status_code=404)
     return FileResponse(path,media_type="audio/wav")
+
+
+@app.get("/latest")
+def latest(request: Request):
+    sent_key = request.headers.get("x-device-key")
+    expected_key = os.environ.get("DEVICE_KEY")
+    if not expected_key or sent_key != expected_key:
+        raise HTTPException(status_code=401)
+    with _lock:
+        text, _latest["text"] = _latest["text"], None   # take it and clear it
+    if not text:
+        return Response(status_code=204)
+    return PlainTextResponse(text)
